@@ -1,0 +1,6 @@
+{
+  "venvPath": ".",
+  "venv": ".sidecar-venv",
+  "extraPaths": ["python"],
+  "include": ["python"]
+}

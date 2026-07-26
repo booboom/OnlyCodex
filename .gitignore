@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.sidecar-venv/
+.sidecar-build/
+.pytest_cache/
+__pycache__/
+src-tauri/target/
+.DS_Store
+windows-build/
+windows-x64.zip

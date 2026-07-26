@@ -1,0 +1,42 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "OnlyCodex",
+  "version": "0.1.0",
+  "identifier": "dev.opencodex.proxy",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [{
+      "title": "OnlyCodex",
+      "width": 1240,
+      "height": 800,
+      "minWidth": 920,
+      "minHeight": 650,
+      "resizable": true,
+      "center": true,
+      "decorations": true,
+      "transparent": false
+    }],
+    "security": { "csp": null }
+  },
+  "bundle": {
+    "active": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "externalBin": ["binaries/opencodex-sidecar"],
+    "targets": "all",
+    "category": "DeveloperTool",
+    "shortDescription": "Connect Codex Desktop to any LLM provider",
+    "longDescription": "A safe local Responses API bridge for Codex Desktop and OpenAI-compatible model providers.",
+    "macOS": { "minimumSystemVersion": "10.15" }
+  }
+}

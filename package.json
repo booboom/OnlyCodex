@@ -1,0 +1,25 @@
+{
+  "name": "onlycodex",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "tauri": "tauri",
+    "app:macos": "bash scripts/run-macos-app.sh"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.11.1",
+    "lucide-svelte": "^0.468.0",
+    "svelte": "^5.56.6"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.2.0",
+    "@tauri-apps/cli": "^2.11.4",
+    "svelte-check": "^4.3.1",
+    "typescript": "^5.7.2",
+    "vite": "^8.1.5"
+  }
+}
