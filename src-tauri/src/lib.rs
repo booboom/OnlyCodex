@@ -394,6 +394,8 @@ fn open_path(path: &std::path::Path) -> Result<(), String> {
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
             std::fs::create_dir_all(&data_dir)?;
@@ -448,7 +450,7 @@ pub fn run() {
                 requests: AtomicU64::new(0),
                 errors: AtomicU64::new(0),
                 client: reqwest::Client::builder()
-                    .user_agent("OnlyCodex/0.1")
+                    .user_agent(concat!("OnlyCodex/", env!("CARGO_PKG_VERSION")))
                     .build()?,
             });
             runtime.info("OnlyCodex 已就绪".into());

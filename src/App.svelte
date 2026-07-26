@@ -1,8 +1,12 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { getVersion } from "@tauri-apps/api/app";
+  import { openUrl } from "@tauri-apps/plugin-opener";
+  import { relaunch } from "@tauri-apps/plugin-process";
+  import { check, type Update } from "@tauri-apps/plugin-updater";
   import {
     Activity, ArrowRight, Blocks, Check, ChevronDown, CircleGauge,
-    CircleStop, Database, FileClock, FileSliders, Gauge, KeyRound,
+    CircleStop, Database, Download, ExternalLink, FileClock, FileSliders, Gauge, KeyRound,
     Layers3, LoaderCircle, Network, Play, Plus, RefreshCw, RotateCcw,
     Save, Search, Server, Settings2, ShieldCheck, SquareTerminal, Trash2,
     Unplug, X, Zap
@@ -35,6 +39,15 @@
   let editingMapping: Mapping | null = null;
   let testingId = "";
   let logTimer: ReturnType<typeof setInterval> | undefined;
+  let updateTimer: ReturnType<typeof setInterval> | undefined;
+  let currentVersion = "1.0.0";
+  let availableUpdate: Update | null = null;
+  let updateDialog = false;
+  let checkingUpdate = false;
+  let installingUpdate = false;
+  let updateProgress = 0;
+  let updateError = "";
+  const releasesUrl = "https://github.com/booboom/OnlyCodex/releases/latest";
 
   const uid = () => crypto.randomUUID();
   const blankProvider = (): Provider => ({ id: uid(), name: "", baseUrl: "", apiKey: "", protocol: "responses", enabled: true, models: [] });
@@ -49,10 +62,17 @@
       try {
         [config, status, logs] = await Promise.all([api.loadConfig(), api.getStatus(), api.getLogs()]);
         logTimer = setInterval(refreshRuntime, 1800);
+        currentVersion = await getVersion();
+        setTimeout(() => void checkForUpdate(false), 2500);
+        updateTimer = setInterval(() => void checkForUpdate(false), 6 * 60 * 60 * 1000);
       } catch (e) { showToast(String(e), true); }
       finally { loading = false; }
     })();
-    return () => clearInterval(logTimer);
+    return () => {
+      clearInterval(logTimer);
+      clearInterval(updateTimer);
+      void availableUpdate?.close();
+    };
   });
 
   async function refreshRuntime() {
@@ -171,6 +191,44 @@
     try { await api.restartCodex(); showToast("Codex 已重启"); } catch (e) { showToast(String(e), true); }
   }
   async function clearLogsNow() { await api.clearLogs(); logs = []; showToast("日志已清空"); }
+  async function checkForUpdate(showResult = true) {
+    if (checkingUpdate || installingUpdate) return;
+    checkingUpdate = true;
+    updateError = "";
+    try {
+      const next = await check({ timeout: 15000 });
+      if (availableUpdate && availableUpdate !== next) await availableUpdate.close();
+      availableUpdate = next;
+      if (showResult && !next) showToast("当前已是最新版本");
+    } catch (e) {
+      updateError = String(e);
+      if (showResult) showToast(`检查更新失败：${updateError}`, true);
+    } finally {
+      checkingUpdate = false;
+    }
+  }
+  async function installUpdate() {
+    if (!availableUpdate || installingUpdate) return;
+    installingUpdate = true;
+    updateError = "";
+    updateProgress = 0;
+    let total = 0;
+    let downloaded = 0;
+    try {
+      await availableUpdate.downloadAndInstall(event => {
+        if (event.event === "Started") total = event.data.contentLength ?? 0;
+        if (event.event === "Progress") {
+          downloaded += event.data.chunkLength;
+          updateProgress = total > 0 ? Math.min(100, Math.round(downloaded / total * 100)) : 0;
+        }
+        if (event.event === "Finished") updateProgress = 100;
+      });
+      await relaunch();
+    } catch (e) {
+      updateError = String(e);
+      installingUpdate = false;
+    }
+  }
   const time = (unix: number) => new Date(unix * 1000).toLocaleTimeString("zh-CN", { hour12: false });
 </script>
 
@@ -179,7 +237,7 @@
 {:else}
   <div class="shell">
     <aside>
-      <div class="brand"><div class="brand-mark"><Zap size={19}/></div><div><strong>OnlyCodex</strong><small>PROXY DESKTOP</small></div></div>
+      <div class="brand"><div class="brand-mark"><Zap size={19}/></div><div class="brand-copy"><div><strong>OnlyCodex</strong><button class:available={availableUpdate} class="brand-version" onclick={() => updateDialog = true}>v{currentVersion}{availableUpdate ? " 可更新" : ""}</button></div><small>PROXY DESKTOP</small></div></div>
       <nav>
         <p>工作区</p>
         {#each nav as item}
@@ -294,6 +352,29 @@
 
 {#if mappingDialog && editingMapping}
   <div class="modal-backdrop" role="presentation" onclick={(e) => e.target === e.currentTarget && (mappingDialog = false)}><section class="modal"><div class="modal-head"><div><span class="section-kicker">MODEL ROUTE</span><h2>配置模型映射</h2></div><button class="icon-button" title="关闭" onclick={() => mappingDialog = false}><X size={19}/></button></div><div class="modal-body"><label><span>Codex 模型名称</span><input bind:value={editingMapping.codexModel} placeholder="例如 gpt-5.4"/></label><label><span>供应商</span><div class="select-wrap"><select bind:value={editingMapping.providerId} onchange={() => editingMapping && (editingMapping.upstreamModel = "")}>{#each config.providers as p}<option value={p.id}>{p.name}</option>{/each}</select><ChevronDown size={16}/></div></label><label><span>上游模型</span><input bind:value={editingMapping.upstreamModel} list="mapping-model-options" placeholder="选择或输入任意模型 ID"/><datalist id="mapping-model-options">{#each config.providers.find(p => p.id === editingMapping?.providerId)?.models.filter(m => m.enabled) ?? [] as model}<option value={model.id}>{model.name}</option>{/each}</datalist><small class="field-hint">可从已发现模型中选择，也可直接输入自定义模型 ID。</small></label></div><div class="modal-actions"><button onclick={() => mappingDialog = false}>取消</button><button class="primary" onclick={commitMapping}><Check size={16}/> 保存映射</button></div></section></div>
+{/if}
+
+{#if updateDialog}
+  <div class="modal-backdrop" role="presentation" onclick={(e) => e.target === e.currentTarget && !installingUpdate && (updateDialog = false)}>
+    <section class="update-modal">
+      <div class="update-modal-head"><span>当前版本</span><button class="update-refresh" disabled={checkingUpdate || installingUpdate} title="检查更新" onclick={() => checkForUpdate(true)}><RefreshCw class={checkingUpdate ? "spin" : ""} size={14}/></button></div>
+      <div class="update-modal-body">
+        <strong>v{currentVersion}</strong>
+        <small>最新版本：{availableUpdate ? `v${availableUpdate.version}` : checkingUpdate ? "检查中…" : `v${currentVersion}`}</small>
+        {#if availableUpdate}
+          <div class="update-available"><Download size={15}/><span>有新版本可用！<small>v{availableUpdate.version}</small></span></div>
+          <button class="update-install" disabled={installingUpdate} onclick={installUpdate}>
+            {#if installingUpdate}<LoaderCircle class="spin" size={15}/>{:else}<Download size={15}/>{/if}
+            {installingUpdate ? `正在更新${updateProgress ? ` ${updateProgress}%` : "…"}` : "立即更新"}
+          </button>
+        {:else}
+          <div class="update-current"><Check size={15}/> 当前已是最新版本</div>
+        {/if}
+        {#if updateError}<p class="update-error">{updateError}</p>{/if}
+        <button class="release-link" onclick={() => openUrl(releasesUrl)}>查看更新日志 <ExternalLink size={11}/></button>
+      </div>
+    </section>
+  </div>
 {/if}
 
 {#if toast}<div class="toast">{toast}</div>{/if}

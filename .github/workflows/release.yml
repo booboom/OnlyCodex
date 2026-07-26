@@ -1,0 +1,136 @@
+name: Release desktop apps
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            runner: windows-2022
+            target: x86_64-pc-windows-msvc
+            bundles: nsis
+            platform: windows
+            signing_identity: ""
+          - name: macOS ARM64
+            runner: macos-14
+            target: aarch64-apple-darwin
+            bundles: dmg
+            platform: macos
+            signing_identity: "-"
+          - name: Linux x64
+            runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            bundles: appimage
+            platform: linux
+            signing_identity: ""
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Linux desktop dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            xdg-utils
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Windows sidecar
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check "pyinstaller>=6.0,<7"
+          New-Item -ItemType Directory -Force src-tauri/binaries, .sidecar-build/dist, .sidecar-build/work | Out-Null
+          python -m PyInstaller --noconfirm --clean --onefile `
+            --name opencodex-sidecar `
+            --paths python `
+            --distpath .sidecar-build/dist `
+            --workpath .sidecar-build/work `
+            --specpath .sidecar-build `
+            python/sidecar_main.py
+          Copy-Item .sidecar-build/dist/opencodex-sidecar.exe `
+            src-tauri/binaries/opencodex-sidecar-${{ matrix.target }}.exe
+
+      - name: Build Unix sidecar
+        if: matrix.platform != 'windows'
+        shell: bash
+        run: |
+          python -m pip install --disable-pip-version-check "pyinstaller>=6.0,<7"
+          mkdir -p src-tauri/binaries .sidecar-build/dist .sidecar-build/work
+          python -m PyInstaller --noconfirm --clean --onefile \
+            --name opencodex-sidecar \
+            --paths python \
+            --distpath .sidecar-build/dist \
+            --workpath .sidecar-build/work \
+            --specpath .sidecar-build \
+            python/sidecar_main.py
+          cp .sidecar-build/dist/opencodex-sidecar \
+            src-tauri/binaries/opencodex-sidecar-${{ matrix.target }}
+          chmod +x src-tauri/binaries/opencodex-sidecar-${{ matrix.target }}
+
+      - name: Build, create release and upload packages
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ matrix.signing_identity }}
+        with:
+          tagName: v__VERSION__
+          releaseName: OnlyCodex v__VERSION__
+          releaseBody: |
+            OnlyCodex v__VERSION__ 首个正式版本。
+
+            安装包：
+            - Windows x64：NSIS `.exe`
+            - macOS ARM64：`.dmg`
+            - Linux x64：`.AppImage`
+
+            本版本支持应用内定时检查更新、签名下载和自动安装。用户配置保存在系统应用数据目录，升级不会覆盖供应商、模型和映射。
+          releaseDraft: false
+          prerelease: false
+          generateReleaseNotes: true
+          updaterJsonPreferNsis: true
+          uploadUpdaterJson: true
+          uploadUpdaterSignatures: true
+          uploadWorkflowArtifacts: true
+          args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
