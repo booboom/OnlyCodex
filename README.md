@@ -1,57 +1,107 @@
 # OnlyCodex
 
-一个基于 [booboom/opencodex](https://github.com/booboom/opencodex) 改造的独立
-Tauri 2 桌面应用，让 Codex Desktop 使用任意 OpenAI Chat Completions 兼容模型。
+OnlyCodex 是一个跨平台桌面应用，让 Codex 使用你自己的模型供应商和 API 密钥。
 
-## 架构
+你可以在一个界面中管理供应商、同步模型、配置模型映射并启动本地代理，同时继续
+使用 Codex 原有的聊天记录、本地记忆、插件和模型选择功能。
 
-- `python/opencodex_proxy/`：指定上游 commit `24379c8` 的原始代理核心，负责
-  Responses ↔ Chat Completions 转换、SSE 流、工具调用、推理回放与模型路由。
-- `src-tauri/`：桌面生命周期、安全备份/恢复 Codex 配置、启动冻结的 Python sidecar。
-- `src/`：Svelte 5 管理界面（仪表盘、供应商、模型、映射、Codex、日志、设置）。
+## 下载
 
-原项目的 CLI/TUI 入口不再作为外部依赖，但其功能已经迁入桌面界面：
+前往 [GitHub Releases](https://github.com/booboom/OnlyCodex/releases/latest) 下载
+适合当前系统的安装包：
 
-| 原功能 | 桌面入口 |
-| --- | --- |
-| `start` / `stop` / `restart` / `status` | 仪表盘和 Codex 设置 |
-| `models` / 启用禁用 / context window | 模型管理 |
-| `discover URL` / Provider 测试 | 供应商管理的“测试并同步模型” |
-| 映射搜索与自定义目标 | 映射管理，可选择或手输模型 ID |
-| 配置备份、恢复、注入 | Codex 设置 |
-| 完整模型 catalog 更新 | Start 自动执行，也可手动刷新 |
-| 实时代理日志 | 日志页面 |
+- Windows x64：`.exe`
+- macOS Apple Silicon：`.dmg`
+- Linux x64：`.AppImage`
 
-应用不再内置 OpenCodeX Go 默认上游：所有请求只走你配置的供应商与映射。
+## 快速开始
 
-应用数据保存在系统应用数据目录。API 密钥不会进入前端 bundle；启动时生成仅供
-本机 sidecar 使用的配置。代理强制绑定 `127.0.0.1` 或 `::1`。
+1. 打开 OnlyCodex，进入“供应商”页面。
+2. 添加供应商，填写名称、Base URL 和 API 密钥。
+3. 点击“测试并同步模型”。
+4. 进入“模型”页面，为需要使用的模型点击“添加到映射”。
+5. 返回仪表盘，点击“启动代理”。
+6. Codex 重启后，从模型列表选择映射的模型并正常发送消息。
 
-## 开发运行
+停止使用时，点击“停止并恢复”，OnlyCodex 会关闭代理并恢复 Codex 原来的配置。
 
-```bash
-npm install
-npm run tauri dev
-```
+## 功能
 
-开发模式会直接使用 `python/` 中的上游核心，需要 Python 3.11+。
+### 供应商管理
 
-## 打包
+- 添加、编辑、启用、禁用和删除供应商。
+- 配置供应商名称、Base URL 和 API 密钥。
+- 默认使用 Responses 协议。
+- 支持 Chat Completions 兼容协议。
+- 测试连接并自动同步供应商模型。
 
-先构建当前平台的冻结 sidecar，再执行 Tauri 打包：
+### 模型管理
 
-```bash
-PYTHON_BIN=/path/to/python3.11 scripts/build-sidecar.sh
-npm run tauri build
-```
+- 按供应商展示全部已同步模型。
+- 搜索、启用或禁用模型。
+- 模型上下文窗口默认设置为 `1,050,000` tokens。
+- 可根据实际模型能力单独修改上下文窗口。
+- 点击“添加到映射”即可直接创建同名模型映射。
+- 已存在同名映射时会提示，不会重复添加。
 
-生成物位于 `src-tauri/target/release/bundle/`。Windows 和 macOS sidecar 必须分别
-在对应系统上构建；Tauri 会把平台二进制一起放入 `.exe` / `.app`。
+### 模型映射
 
-## 安全恢复
+- 自定义 Codex 中显示的模型名称。
+- 将 Codex 模型映射到任意供应商和上游模型。
+- 支持创建、编辑、启用、禁用和删除映射。
+- 上游模型可以从同步结果中选择，也可以手动输入。
+- 只有已启用的映射会显示在 Codex 模型列表中。
 
-启动代理前，应用会原样备份 `~/.codex/config.toml`，随后用 TOML 解析器注入
-`opencodex_proxy` provider。停止代理时逐字恢复原配置。备份缺失时应用会拒绝
-覆盖现有配置。
+### Codex 集成
 
-上游代码的 MIT 许可证见 [python/UPSTREAM_LICENSE](python/UPSTREAM_LICENSE)。
+- 一键启动代理并重新打开 Codex。
+- 一键停止代理并恢复原始 Codex 配置。
+- 支持手动备份和恢复 Codex 配置。
+- 支持刷新 Codex 模型目录。
+- 支持从 OnlyCodex 中重启 Codex。
+- 保留本地聊天记录、本地记忆和插件配置。
+- 保留现有登录状态。
+- 模型请求使用你配置的供应商 API 密钥。
+
+### 运行状态与日志
+
+- 显示代理运行状态和本地监听地址。
+- 显示供应商、模型和活动映射数量。
+- 统计已处理请求数和错误数。
+- 查看实时运行日志和最近活动。
+- 支持清空日志。
+- 可设置代理端口、请求超时和请求体大小上限。
+
+### 后台运行
+
+- 关闭主窗口后继续在后台运行。
+- 点击系统状态栏图标可重新打开窗口。
+- 可通过状态栏菜单完全退出 OnlyCodex。
+- 可设置打开 OnlyCodex 时自动启动代理。
+
+### 自动更新
+
+- 显示当前 OnlyCodex 版本。
+- 自动定时检查新版本。
+- 发现新版本时显示“可更新”。
+- 点击版本号可查看当前版本和最新版本。
+- 支持直接下载并安装适合当前系统的更新。
+- 更新完成后自动重启应用。
+- 可打开最新 Release 页面查看更新日志。
+- 更新不会删除供应商、模型、映射或其他本地配置。
+
+## 数据与隐私
+
+- 供应商、API 密钥、模型和映射只保存在你的电脑上。
+- 发布的安装包不包含开发者的供应商配置或 API 密钥。
+- OnlyCodex 只允许代理监听本机地址，不会将服务暴露到局域网。
+- 启动代理前会备份 Codex 配置。
+- 停止代理或完全退出应用时会恢复 Codex 原始配置。
+- 应用升级不会覆盖或删除你的 OnlyCodex 配置。
+
+## 使用提示
+
+- 修改供应商或模型映射前，请先停止代理。
+- 上下文窗口应与上游模型实际支持的大小一致。设置过高时，供应商可能拒绝请求。
+- 如果 Codex 模型列表没有刷新，可在“Codex 设置”页面点击“刷新模型目录”，然后重启 Codex。
+- 如果端口已被其他程序占用，请在“设置”页面更换端口。
