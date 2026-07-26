@@ -131,6 +131,6 @@ jobs:
           generateReleaseNotes: true
           updaterJsonPreferNsis: true
           uploadUpdaterJson: true
-          uploadUpdaterSignatures: true
+          uploadUpdaterSignatures: false
           uploadWorkflowArtifacts: true
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
