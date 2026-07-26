@@ -118,14 +118,14 @@ jobs:
           tagName: v__VERSION__
           releaseName: OnlyCodex v__VERSION__
           releaseBody: |
-            OnlyCodex v__VERSION__ 首个正式版本。
+            OnlyCodex v__VERSION__。
 
             安装包：
             - Windows x64：NSIS `.exe`
             - macOS ARM64：`.dmg`
             - Linux x64：`.AppImage`
 
-            本版本支持应用内定时检查更新、签名下载和自动安装。用户配置保存在系统应用数据目录，升级不会覆盖供应商、模型和映射。
+            支持应用内定时检查更新、签名下载和自动安装。用户配置保存在系统应用数据目录，升级不会覆盖供应商、模型和映射。
           releaseDraft: false
           prerelease: false
           generateReleaseNotes: true

@@ -44,6 +44,7 @@
   let availableUpdate: Update | null = null;
   let updateDialog = false;
   let checkingUpdate = false;
+  let updateCheckSucceeded = false;
   let installingUpdate = false;
   let updateProgress = 0;
   let updateError = "";
@@ -63,7 +64,7 @@
         [config, status, logs] = await Promise.all([api.loadConfig(), api.getStatus(), api.getLogs()]);
         logTimer = setInterval(refreshRuntime, 1800);
         currentVersion = await getVersion();
-        setTimeout(() => void checkForUpdate(false), 2500);
+        setTimeout(() => void checkForUpdate(false), 5000);
         updateTimer = setInterval(() => void checkForUpdate(false), 6 * 60 * 60 * 1000);
       } catch (e) { showToast(String(e), true); }
       finally { loading = false; }
@@ -195,17 +196,26 @@
     if (checkingUpdate || installingUpdate) return;
     checkingUpdate = true;
     updateError = "";
-    try {
-      const next = await check({ timeout: 15000 });
-      if (availableUpdate && availableUpdate !== next) await availableUpdate.close();
-      availableUpdate = next;
-      if (showResult && !next) showToast("当前已是最新版本");
-    } catch (e) {
-      updateError = String(e);
-      if (showResult) showToast(`检查更新失败：${updateError}`, true);
-    } finally {
-      checkingUpdate = false;
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (attempt > 0) await new Promise(resolve => setTimeout(resolve, attempt * 1500));
+      try {
+        const next = await check({ timeout: 25000 });
+        if (availableUpdate && availableUpdate !== next) await availableUpdate.close();
+        availableUpdate = next;
+        updateCheckSucceeded = true;
+        if (showResult && !next) showToast("当前已是最新版本");
+        checkingUpdate = false;
+        return;
+      } catch (e) {
+        lastError = e;
+      }
     }
+    checkingUpdate = false;
+    if (!showResult) return;
+    updateError = "暂时无法连接 GitHub，请检查网络后重试。";
+    showToast(`检查更新失败：${updateError}`, true);
+    console.warn("OnlyCodex update check failed", lastError);
   }
   async function installUpdate() {
     if (!availableUpdate || installingUpdate) return;
@@ -360,15 +370,17 @@
       <div class="update-modal-head"><span>当前版本</span><button class="update-refresh" disabled={checkingUpdate || installingUpdate} title="检查更新" onclick={() => checkForUpdate(true)}><RefreshCw class={checkingUpdate ? "spin" : ""} size={14}/></button></div>
       <div class="update-modal-body">
         <strong>v{currentVersion}</strong>
-        <small>最新版本：{availableUpdate ? `v${availableUpdate.version}` : checkingUpdate ? "检查中…" : `v${currentVersion}`}</small>
+        <small>最新版本：{availableUpdate ? `v${availableUpdate.version}` : checkingUpdate ? "检查中…" : updateCheckSucceeded ? `v${currentVersion}` : "尚未检查"}</small>
         {#if availableUpdate}
           <div class="update-available"><Download size={15}/><span>有新版本可用！<small>v{availableUpdate.version}</small></span></div>
           <button class="update-install" disabled={installingUpdate} onclick={installUpdate}>
             {#if installingUpdate}<LoaderCircle class="spin" size={15}/>{:else}<Download size={15}/>{/if}
             {installingUpdate ? `正在更新${updateProgress ? ` ${updateProgress}%` : "…"}` : "立即更新"}
           </button>
-        {:else}
+        {:else if updateCheckSucceeded}
           <div class="update-current"><Check size={15}/> 当前已是最新版本</div>
+        {:else}
+          <div class="update-current"><RefreshCw size={15}/> 点击右上角检查更新</div>
         {/if}
         {#if updateError}<p class="update-error">{updateError}</p>{/if}
         <button class="release-link" onclick={() => openUrl(releasesUrl)}>查看更新日志 <ExternalLink size={11}/></button>
